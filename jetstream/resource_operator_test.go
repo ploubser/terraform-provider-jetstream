@@ -48,7 +48,7 @@ func TestResourceOperator(t *testing.T) {
 					resource.TestCheckResourceAttrSet("jetstream_operator.TEST", "public_key"),
 					resource.TestCheckResourceAttr("jetstream_operator.TEST", "service_url", "https://...."),
 					resource.TestCheckResourceAttr("jetstream_operator.TEST", "tags.0", "foo"),
-					resource.TestCheckResourceAttr("jetstream_operator.TEST", "tags.1", "bar"),
+					resource.TestCheckResourceAttr("jetstream_operator.TEST2", "tags.1", "bar"),
 					// Check jwt contents and see if it matches what we expect
 				),
 			},

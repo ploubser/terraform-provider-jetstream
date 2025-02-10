@@ -133,6 +133,12 @@ func resourceUserDelete(d *schema.ResourceData, m any) error {
 
 	username := d.Get("name").(string)
 	account.Users().Delete(username)
+
+	err = auth.Commit()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 

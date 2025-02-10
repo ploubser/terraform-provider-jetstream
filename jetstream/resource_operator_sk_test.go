@@ -48,8 +48,7 @@ func TestResourceOperatorSK(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		ProviderFactories: testJsProviders,
-		// Write this check next
-		//CheckDestroy:      testOperatorDoesnotExist("/tmp/test/store", "TEST2"),
+		CheckDestroy:      testOperatorSigningKeyDoesnotExist("/tmp/test/store", "/tmp/test/store/key", "TEST"),
 		Steps: []resource.TestStep{
 			{
 				Config: testOperatorSkBasic,

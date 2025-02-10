@@ -58,7 +58,6 @@ func resourceOperatorSkCreate(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	// This can't stay here, but leave it here for testing
 	d.Set("public_key", key)
 	d.SetId(key)
 

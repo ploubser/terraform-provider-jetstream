@@ -1,10 +1,6 @@
 package jetstream
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 )
@@ -20,7 +16,6 @@ func resourceOperator() *schema.Resource {
 		},
 
 		Schema: map[string]*schema.Schema{
-			// Not in Arri's definition but they need to be named for auth builder
 			"name": {
 				Type:         schema.TypeString,
 				Description:  "The operator name",
@@ -81,32 +76,32 @@ func resourceOperatorRead(d *schema.ResourceData, m any) error {
 }
 
 func resourceOperatorDelete(d *schema.ResourceData, m any) error {
-	conf := m.(ProviderConfig)
-	auth, err := NewAuthProvider(conf)
-	if err != nil {
-		return err
-	}
+	/*	conf := m.(ProviderConfig)
+		auth, err := NewAuthProvider(conf)
+		if err != nil {
+			return err
+		}
 
-	name := d.Get("name").(string)
-	// This is suppose to do something?
-	err = auth.Operators().Delete(name)
-	if err != nil {
-		return err
-	}
+		name := d.Get("name").(string)
+		// This is suppose to do something?
+		err = auth.Operators().Delete(name)
+		if err != nil {
+			return err
+		}
 
-	err = auth.Commit()
-	if err != nil {
-		return err
-	}
+		err = auth.Commit()
+		if err != nil {
+			return err
+		}
 
-	// HERE(ploubser): This is temporary while using the NSC provider, since it can't remove operators
-	// Delete the operator's directory
-	// Are there any other files that need to be deleted?
-	err = os.RemoveAll(filepath.Join(conf.StoreDirPath, name))
-	if err != nil {
-		fmt.Println("Error removing operator directory:", err)
-	}
-
+		// HERE(ploubser): This is temporary while using the NSC provider, since it can't remove operators
+		// Delete the operator's directory
+		// Are there any other files that need to be deleted?
+		err = os.RemoveAll(filepath.Join(conf.StoreDirPath, name))
+		if err != nil {
+			fmt.Println("Error removing operator directory:", err)
+		}
+	*/
 	return nil
 }
 

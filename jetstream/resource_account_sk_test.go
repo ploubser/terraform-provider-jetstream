@@ -61,7 +61,7 @@ func TestResourceAccountSK(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		ProviderFactories: testJsProviders,
 		// Write this check next
-		//CheckDestroy:      testOperatorDoesnotExist("/tmp/test/store", "TEST2"),
+		CheckDestroy: testAccountSigningKeyDoesnotExist("/tmp/test/store", "/tmp/test/store/key", "TEST", "WEATHER_SERVICE"),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccountSkBasic,

@@ -24,6 +24,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 	"github.com/nats-io/jsm.go"
 	"github.com/nats-io/jsm.go/api"
+	authb "github.com/synadia-io/jwt-auth-builder.go"
+	"github.com/synadia-io/jwt-auth-builder.go/providers/nsc"
 )
 
 func testStreamHasMetadata(t *testing.T, mgr *jsm.Manager, stream string, metadata map[string]string) resource.TestCheckFunc {
@@ -341,6 +343,77 @@ func testOperatorDoesnotExist(storedir, name string) resource.TestCheckFunc {
 		} else if !os.IsNotExist(err) {
 			return err
 		}
+		return nil
+	}
+}
+
+func testAccountDoesnotExist(storedir, operatorname, name string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		operatorDir := filepath.Join(storedir, operatorname, "accounts", name)
+		_, err := os.Stat(operatorDir)
+		if err == nil {
+			return fmt.Errorf("directory %s exists", operatorDir)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+}
+
+func testUserDoesnotExist(storedir, operatorname, accountname, name string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		operatorDir := filepath.Join(storedir, operatorname, "accounts", accountname, "users", name)
+		_, err := os.Stat(operatorDir)
+		if err == nil {
+			return fmt.Errorf("directory %s exists", operatorDir)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+}
+
+func testOperatorSigningKeyDoesnotExist(storedir, keydir, operatorname string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		auth, err := authb.NewAuth(nsc.NewNscProvider(storedir, keydir))
+		if err != nil {
+			return err
+		}
+
+		operator, err := auth.Operators().Get(operatorname)
+		if err != nil {
+			return err
+		}
+
+		if len(operator.SigningKeys().List()) > 0 {
+			return fmt.Errorf("failed to delete signing key on delete")
+		}
+
+		return nil
+	}
+}
+
+func testAccountSigningKeyDoesnotExist(storedir, keydir, operatorname, accountname string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		auth, err := authb.NewAuth(nsc.NewNscProvider(storedir, keydir))
+		if err != nil {
+			return err
+		}
+
+		operator, err := auth.Operators().Get(operatorname)
+		if err != nil {
+			return err
+		}
+
+		account, err := operator.Accounts().Get(accountname)
+		if err != nil {
+			return err
+		}
+
+		if len(account.ScopedSigningKeys().List()) > 0 {
+			return fmt.Errorf("failed to delete signing key on delete")
+		}
+
 		return nil
 	}
 }

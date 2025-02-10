@@ -13,7 +13,7 @@ provider "jetstream" {
   servers = "foo"
   store_dir_path = "/tmp/test/store"
   keys_dir_path = "/tmp/test/keys"
-  auth_provider = "nsc"
+  auth_backend = "nsc"
 }
 
 resource "jetstream_operator" "TEST" { 
@@ -71,8 +71,7 @@ func TestResourceUser(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		ProviderFactories: testJsProviders,
-		// Write this check next
-		//CheckDestroy:      testOperatorDoesnotExist("/tmp/test/store", "TEST2"),
+		CheckDestroy:      testUserDoesnotExist("/tmp/test/store", "TEST", "WEATHER_SERVICE", "WEATHER_USER"),
 		Steps: []resource.TestStep{
 			{
 				Config: testUserBasic,
