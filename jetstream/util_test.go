@@ -15,6 +15,8 @@ package jetstream
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -326,6 +328,19 @@ func testStreamIsTransformed(t *testing.T, mgr *jsm.Manager, stream string, tran
 			return fmt.Errorf("subject transform %v does not match %v", *str.Configuration().SubjectTransform, transform)
 		}
 
+		return nil
+	}
+}
+
+func testOperatorDoesnotExist(storedir, name string) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		operatorDir := filepath.Join(storedir, name)
+		_, err := os.Stat(operatorDir)
+		if err == nil {
+			return fmt.Errorf("directory %s exists", operatorDir)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
 		return nil
 	}
 }

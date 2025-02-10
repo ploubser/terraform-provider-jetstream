@@ -28,6 +28,8 @@ import (
 	"github.com/nats-io/jsm.go/api"
 	"github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nats.go"
+	authb "github.com/synadia-io/jwt-auth-builder.go"
+	"github.com/synadia-io/jwt-auth-builder.go/providers/nsc"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 )
@@ -484,7 +486,11 @@ func getConnectProperties(d *schema.ResourceData) (*connectProperties, error) {
 }
 
 func connectMgr(d *schema.ResourceData) (any, error) {
-	return func() (*nats.Conn, *jsm.Manager, error) {
+	config := ProviderConfig{}
+	config.AuthBackend = d.Get("auth_backend").(string)
+	config.KeysDirPath = d.Get("keys_dir_path").(string)
+	config.StoreDirPath = d.Get("store_dir_path").(string)
+	config.Connectionfn = func() (*nats.Conn, *jsm.Manager, error) {
 		props, err := getConnectProperties(d)
 		if err != nil {
 			return nil, nil, err
@@ -574,5 +580,17 @@ func connectMgr(d *schema.ResourceData) (any, error) {
 		}
 
 		return nc, mgr, err
-	}, nil
+	}
+
+	return config, nil
+}
+
+func NewAuthProvider(conf ProviderConfig) (*authb.AuthImpl, error) {
+	if conf.AuthBackend == "nsc" {
+		return authb.NewAuth(nsc.NewNscProvider(conf.StoreDirPath, conf.KeysDirPath))
+	} else if conf.AuthBackend == "kv" {
+		return nil, fmt.Errorf("kv provider type not supported yet")
+	}
+
+	return nil, fmt.Errorf("invalid provider type: %s", conf.AuthBackend)
 }

@@ -17,12 +17,22 @@ import (
 	"regexp"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	"github.com/nats-io/jsm.go"
+	"github.com/nats-io/nats.go"
 )
 
 var streamIdRegex = regexp.MustCompile("^JETSTREAM_STREAM_(.+)$")
 var consumerIdRegex = regexp.MustCompile("^JETSTREAM_STREAM_(.+?)_CONSUMER_(.+)$")
 var kvIdRegex = regexp.MustCompile("^JETSTREAM_KV_(.+)$")
 var kvEntryIdRegex = regexp.MustCompile("^JETSTREAM_KV_(.+?)_ENTRY_(.+)$")
+
+type ProviderConfig struct {
+	// This is temporary, build it out if you need to
+	AuthBackend  string
+	Connectionfn func() (*nats.Conn, *jsm.Manager, error)
+	StoreDirPath string
+	KeysDirPath  string
+}
 
 func Provider() *schema.Provider {
 	return &schema.Provider{
@@ -61,6 +71,23 @@ func Provider() *schema.Provider {
 				Description:   "Connect using a NKEY seed stored in a file",
 				ConflictsWith: []string{"user", "credentials", "credential_data"},
 			},
+			// Test data
+			"auth_backend": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "The auth provider type (nsc or kv)",
+			},
+			"store_dir_path": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "Testing where the keys go",
+			},
+			"keys_dir_path": {
+				Type:        schema.TypeString,
+				Optional:    true,
+				Description: "Testing where the keys go",
+			},
+
 			"tls": {
 				Type:     schema.TypeSet,
 				MaxItems: 1,
@@ -103,10 +130,17 @@ func Provider() *schema.Provider {
 		},
 
 		ResourcesMap: map[string]*schema.Resource{
-			"jetstream_stream":    resourceStream(),
-			"jetstream_consumer":  resourceConsumer(),
-			"jetstream_kv_bucket": resourceKVBucket(),
-			"jetstream_kv_entry":  resourceKVEntry(),
+			"jetstream_stream":         resourceStream(),
+			"jetstream_consumer":       resourceConsumer(),
+			"jetstream_kv_bucket":      resourceKVBucket(),
+			"jetstream_kv_entry":       resourceKVEntry(),
+			"jetstream_operator":       resourceOperator(),
+			"jetstream_operator_sk":    resourceOperatorSk(),
+			"jetstream_account":        resourceAccount(),
+			"jetstream_account_sk":     resourceAccountSk(),
+			"jetstream_user":           resourceUser(),
+			"jetstream_account_export": resourceAccountExport(),
+			"jetstream_import":         resourceImport(),
 		},
 
 		ConfigureFunc: connectMgr,
