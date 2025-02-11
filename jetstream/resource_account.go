@@ -1,6 +1,10 @@
 package jetstream
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	authb "github.com/synadia-io/jwt-auth-builder.go"
@@ -103,37 +107,37 @@ func resourceAccountRead(d *schema.ResourceData, m any) error {
 
 // HERE(ploubser): We cannot currently delete system accounts
 func resourceAccountDelete(d *schema.ResourceData, m any) error {
-	/*	conf := m.(ProviderConfig)
-		auth, err := NewAuthProvider(conf)
-		if err != nil {
-			return err
-		}
+	conf := m.(ProviderConfig)
+	auth, err := NewAuthProvider(conf)
+	if err != nil {
+		return err
+	}
 
-		operatorname := d.Get("operator").(string)
-		operator, err := auth.Operators().Get(operatorname)
-		if err != nil {
-			return err
-		}
+	operatorname := d.Get("operator").(string)
+	operator, err := auth.Operators().Get(operatorname)
+	if err != nil {
+		return err
+	}
 
-		accountName := d.Get("name").(string)
-		err = operator.Accounts().Delete(accountName)
-		if err != nil {
-			return err
-		}
+	accountName := d.Get("name").(string)
+	err = operator.Accounts().Delete(accountName)
+	if err != nil {
+		return err
+	}
 
-		err = auth.Commit()
-		if err != nil {
-			return err
-		}
+	err = auth.Commit()
+	if err != nil {
+		return err
+	}
 
-		// HERE(ploubser): This is temporary while using the NSC provider, since it can't remove accounts
-		// Delete the accounts' directory
-		// Are there any other files that need to be deleted?
-		err = os.RemoveAll(filepath.Join(conf.StoreDirPath, operatorname, "accounts", accountName))
-		if err != nil {
-			fmt.Println("Error removing account directory:", err)
-		}
-	*/
+	// HERE(ploubser): This is temporary while using the NSC provider, since it can't remove accounts
+	// Delete the accounts' directory
+	// Are there any other files that need to be deleted?
+	err = os.RemoveAll(filepath.Join(conf.StoreDirPath, operatorname, "accounts", accountName))
+	if err != nil {
+		fmt.Println("Error removing account directory:", err)
+	}
+
 	return nil
 }
 

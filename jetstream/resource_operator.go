@@ -1,6 +1,11 @@
 package jetstream
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 )
@@ -23,19 +28,33 @@ func resourceOperator() *schema.Resource {
 				ForceNew:     true,
 				ValidateFunc: validation.StringIsNotEmpty,
 			},
-			"service_url": {
+			"operator_service_url": {
 				Type:         schema.TypeString,
-				Description:  "",
+				Description:  "Operator's API endpoint for account-related operations",
+				Optional:     true,
+				ForceNew:     false,
+				ValidateFunc: validation.StringIsNotEmpty,
+			},
+			"account_server_url": {
+				Type:         schema.TypeString,
+				Description:  "HTTP endpoint where NATS servers can dynamically fetch Account JWTs",
 				Optional:     true,
 				ForceNew:     false,
 				ValidateFunc: validation.StringIsNotEmpty,
 			},
 			"tags": {
 				Type:        schema.TypeList,
-				Description: "",
+				Description: "Tags to group the operator",
 				Optional:    true,
 				ForceNew:    false,
 				Elem:        &schema.Schema{Type: schema.TypeString},
+			},
+			"expiry": {
+				Type:         schema.TypeString,
+				Description:  "Sets an expiration date for the operator JWT, duration specified in seconds",
+				Optional:     true,
+				ForceNew:     false,
+				ValidateFunc: validation.IsRFC3339Time,
 			},
 			// Exported
 			"public_key": {
@@ -59,6 +78,39 @@ func resourceOperatorCreate(d *schema.ResourceData, m any) error {
 		return err
 	}
 
+	serviceUrl := d.Get("operator_service_url").(string)
+	err = o.SetOperatorServiceURL(serviceUrl)
+	if err != nil {
+		return err
+	}
+
+	accountServer := d.Get("account_server_url").(string)
+	err = o.SetAccountServerURL(accountServer)
+	if err != nil {
+		return err
+	}
+
+	tags := []string{}
+	for _, tag := range d.Get("tags").([]any) {
+		tags = append(tags, tag.(string))
+	}
+
+	err = o.Tags().Set(tags...)
+	if err != nil {
+		return err
+	}
+
+	expiryString := d.Get("expiry").(string)
+	x, err := time.Parse(time.RFC3339, expiryString)
+	if err != nil {
+		return err
+	}
+
+	err = o.SetExpiry(x.Unix())
+	if err != nil {
+		return err
+	}
+
 	err = auth.Commit()
 	if err != nil {
 		return err
@@ -70,42 +122,133 @@ func resourceOperatorCreate(d *schema.ResourceData, m any) error {
 	return nil
 }
 
-// TODO
 func resourceOperatorRead(d *schema.ResourceData, m any) error {
+	conf := m.(ProviderConfig)
+	auth, err := NewAuthProvider(conf)
+	if err != nil {
+		return err
+	}
+
+	o, err := auth.Operators().Get(d.Id())
+	if err != nil {
+		return err
+	}
+
+	err = d.Set("name", o.Name())
+	if err != nil {
+		return err
+	}
+
+	if len(o.OperatorServiceURLs()) > 0 {
+		err = d.Set("operator_service_url", o.OperatorServiceURLs()[0])
+		if err != nil {
+			return err
+		}
+	}
+
+	err = d.Set("account_server_url", o.AccountServerURL())
+	if err != nil {
+		return err
+	}
+
+	tags, err := o.Tags().All()
+	if err != nil {
+		return err
+	}
+
+	err = d.Set("tags", tags)
+	if err != nil {
+		return err
+	}
+
+	err = d.Set("expiry", time.Unix(o.Expiry(), 0).Format(time.RFC3339))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func resourceOperatorDelete(d *schema.ResourceData, m any) error {
-	/*	conf := m.(ProviderConfig)
-		auth, err := NewAuthProvider(conf)
-		if err != nil {
-			return err
-		}
+	conf := m.(ProviderConfig)
+	auth, err := NewAuthProvider(conf)
+	if err != nil {
+		return err
+	}
 
-		name := d.Get("name").(string)
-		// This is suppose to do something?
-		err = auth.Operators().Delete(name)
-		if err != nil {
-			return err
-		}
+	name := d.Get("name").(string)
+	err = auth.Operators().Delete(name)
+	if err != nil {
+		return err
+	}
 
-		err = auth.Commit()
-		if err != nil {
-			return err
-		}
+	err = auth.Commit()
+	if err != nil {
+		return err
+	}
 
-		// HERE(ploubser): This is temporary while using the NSC provider, since it can't remove operators
-		// Delete the operator's directory
-		// Are there any other files that need to be deleted?
+	// HERE(ploubser): This is temporary while using the NSC provider, since it can't remove operators
+	// Delete the operator's directory
+	// We need to also delete the corresponding key but not sure how to do that without removing the other keys
+	if conf.AuthBackend == "nsc" {
 		err = os.RemoveAll(filepath.Join(conf.StoreDirPath, name))
 		if err != nil {
 			fmt.Println("Error removing operator directory:", err)
 		}
-	*/
+	}
+
 	return nil
 }
 
-// TODO
 func resourceOperatorUpdate(d *schema.ResourceData, m any) error {
+	conf := m.(ProviderConfig)
+	auth, err := NewAuthProvider(conf)
+	if err != nil {
+		return err
+	}
+
+	o, err := auth.Operators().Get(d.Id())
+	if err != nil {
+		return err
+	}
+
+	serviceUrl := d.Get("operator_service_url").(string)
+	err = o.SetOperatorServiceURL(serviceUrl)
+	if err != nil {
+		return err
+	}
+
+	accountServer := d.Get("account_server_url").(string)
+	err = o.SetAccountServerURL(accountServer)
+	if err != nil {
+		return err
+	}
+
+	tags := []string{}
+	for _, tag := range d.Get("tags").([]any) {
+		tags = append(tags, tag.(string))
+	}
+
+	err = o.Tags().Set(tags...)
+	if err != nil {
+		return err
+	}
+
+	expiryString := d.Get("expiry").(string)
+	x, err := time.Parse(time.RFC3339, expiryString)
+	if err != nil {
+		return err
+	}
+
+	err = o.SetExpiry(x.Unix())
+	if err != nil {
+		return err
+	}
+
+	err = auth.Commit()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

@@ -18,8 +18,10 @@ provider "jetstream" {
 
 resource "jetstream_operator" "TEST" { 
   name        = "TEST"
-  service_url = "https://...." // optional
-  tags        = ["foo", "bar"]     // optional
+  operator_service_url = "nats://localhost:4222"
+  account_server_url = "https://jwt-resolver.example.com"
+  tags        = ["foo", "bar"]    
+  expiry      = "2100-02-11T00:00:00Z"
 } 
 `
 
@@ -40,16 +42,17 @@ func TestResourceOperator(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		ProviderFactories: testJsProviders,
-		CheckDestroy:      testOperatorDoesnotExist("/tmp/test/store", "TEST2"),
+		CheckDestroy:      testOperatorDoesnotExist("/tmp/test/store", "TEST"),
 		Steps: []resource.TestStep{
 			{
 				Config: testOperatorBasic,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("jetstream_operator.TEST", "public_key"),
-					resource.TestCheckResourceAttr("jetstream_operator.TEST", "service_url", "https://...."),
+					resource.TestCheckResourceAttr("jetstream_operator.TEST", "operator_service_url", "nats://localhost:4222"),
+					resource.TestCheckResourceAttr("jetstream_operator.TEST", "account_server_url", "https://jwt-resolver.example.com"),
 					resource.TestCheckResourceAttr("jetstream_operator.TEST", "tags.0", "foo"),
-					resource.TestCheckResourceAttr("jetstream_operator.TEST2", "tags.1", "bar"),
-					// Check jwt contents and see if it matches what we expect
+					resource.TestCheckResourceAttr("jetstream_operator.TEST", "tags.1", "bar"),
+					resource.TestCheckResourceAttr("jetstream_operator.TEST", "expiry", "2100-02-11T00:00:00Z"),
 				),
 			},
 		},
