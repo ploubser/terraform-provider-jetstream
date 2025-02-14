@@ -73,19 +73,19 @@ func resourceOperatorCreate(d *schema.ResourceData, m any) error {
 	}
 
 	name := d.Get("name").(string)
-	o, err := auth.Operators().Add(name)
+	operator, err := auth.Operators().Add(name)
 	if err != nil {
 		return err
 	}
 
 	serviceUrl := d.Get("operator_service_url").(string)
-	err = o.SetOperatorServiceURL(serviceUrl)
+	err = operator.SetOperatorServiceURL(serviceUrl)
 	if err != nil {
 		return err
 	}
 
 	accountServer := d.Get("account_server_url").(string)
-	err = o.SetAccountServerURL(accountServer)
+	err = operator.SetAccountServerURL(accountServer)
 	if err != nil {
 		return err
 	}
@@ -95,20 +95,22 @@ func resourceOperatorCreate(d *schema.ResourceData, m any) error {
 		tags = append(tags, tag.(string))
 	}
 
-	err = o.Tags().Set(tags...)
+	err = operator.Tags().Set(tags...)
 	if err != nil {
 		return err
 	}
 
-	expiryString := d.Get("expiry").(string)
-	x, err := time.Parse(time.RFC3339, expiryString)
-	if err != nil {
-		return err
-	}
+	expiryString, isSet := d.GetOk("expiry")
+	if isSet {
+		parsedTime, err := time.Parse(time.RFC3339, expiryString.(string))
+		if err != nil {
+			return err
+		}
 
-	err = o.SetExpiry(x.Unix())
-	if err != nil {
-		return err
+		err = operator.SetExpiry(parsedTime.Unix())
+		if err != nil {
+			return err
+		}
 	}
 
 	err = auth.Commit()
@@ -117,7 +119,7 @@ func resourceOperatorCreate(d *schema.ResourceData, m any) error {
 	}
 
 	d.SetId(name)
-	d.Set("public_key", o.JWT())
+	d.Set("public_key", operator.JWT())
 
 	return nil
 }
@@ -129,29 +131,29 @@ func resourceOperatorRead(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	o, err := auth.Operators().Get(d.Id())
+	operator, err := auth.Operators().Get(d.Id())
 	if err != nil {
 		return err
 	}
 
-	err = d.Set("name", o.Name())
+	err = d.Set("name", operator.Name())
 	if err != nil {
 		return err
 	}
 
-	if len(o.OperatorServiceURLs()) > 0 {
-		err = d.Set("operator_service_url", o.OperatorServiceURLs()[0])
+	if len(operator.OperatorServiceURLs()) > 0 {
+		err = d.Set("operator_service_url", operator.OperatorServiceURLs()[0])
 		if err != nil {
 			return err
 		}
 	}
 
-	err = d.Set("account_server_url", o.AccountServerURL())
+	err = d.Set("account_server_url", operator.AccountServerURL())
 	if err != nil {
 		return err
 	}
 
-	tags, err := o.Tags().All()
+	tags, err := operator.Tags().All()
 	if err != nil {
 		return err
 	}
@@ -161,7 +163,7 @@ func resourceOperatorRead(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	err = d.Set("expiry", time.Unix(o.Expiry(), 0).Format(time.RFC3339))
+	err = d.Set("expiry", time.Unix(operator.Expiry(), 0).Format(time.RFC3339))
 	if err != nil {
 		return err
 	}
