@@ -38,7 +38,7 @@ func resourceAccount() *schema.Resource {
 			},
 			"system": {
 				Type:        schema.TypeBool,
-				Description: "Is this a system account",
+				Description: "Creates a system account",
 				Optional:    true,
 				ForceNew:    true,
 			},
@@ -55,6 +55,13 @@ func resourceAccount() *schema.Resource {
 				Optional:     true,
 				ForceNew:     false,
 				ValidateFunc: validation.IsRFC3339Time,
+			},
+			"tags": {
+				Type:        schema.TypeList,
+				Description: "Tags to group the operator",
+				Optional:    true,
+				ForceNew:    false,
+				Elem:        &schema.Schema{Type: schema.TypeString},
 			},
 			"limits": {
 				Type:        schema.TypeList,
@@ -135,45 +142,38 @@ func resourceAccountCreate(d *schema.ResourceData, m any) error {
 		operator.SetSystemAccount(account)
 	}
 
-	limits, set := d.GetOk("limits")
-
-	if set {
-		limitsRaw := limits.([]any)[0]
-		limitsMap := limitsRaw.(map[string]any)
-
-		bearer_tokens, is_set := limitsMap["bearer_tokens"]
-		if is_set {
-			account.Limits().SetDisallowBearerTokens(!bearer_tokens.(bool))
+	tags := []string{}
+	if rawTags, ok := d.GetOk("tags"); ok {
+		for _, tag := range rawTags.([]any) {
+			tags = append(tags, tag.(string))
 		}
+	}
 
-		subscriptions, is_set := limitsMap["subscriptions"]
-		if is_set {
-			account.Limits().SetMaxSubscriptions(int64(subscriptions.(int)))
-		}
+	err = account.Tags().Set(tags...)
+	if err != nil {
+		return err
+	}
 
-		connections, is_set := limitsMap["connections"]
-		if is_set {
-			account.Limits().SetMaxConnections(int64(connections.(int)))
-		}
+	if limits, set := d.GetOk("limits"); set {
+		if limitsMap, ok := limits.([]any)[0].(map[string]any); ok {
+			mappings := map[string]func(int64) error{
+				"subscriptions": account.Limits().SetMaxSubscriptions,
+				"connections":   account.Limits().SetMaxConnections,
+				"payload":       account.Limits().SetMaxPayload,
+				"leafnodes":     account.Limits().SetMaxLeafNodeConnections,
+				"imports":       account.Limits().SetMaxImports,
+				"exports":       account.Limits().SetMaxExports,
+			}
 
-		payload, is_set := limitsMap["payload"]
-		if is_set {
-			account.Limits().SetMaxPayload(int64(payload.(int)))
-		}
+			if bearerTokens, ok := limitsMap["bearer_tokens"]; ok {
+				account.Limits().SetDisallowBearerTokens(!bearerTokens.(bool))
+			}
 
-		leafnodes, is_set := limitsMap["leafnodes"]
-		if is_set {
-			account.Limits().SetMaxLeafNodeConnections(int64(leafnodes.(int)))
-		}
-
-		imports, is_set := limitsMap["imports"]
-		if is_set {
-			account.Limits().SetMaxImports(int64(imports.(int)))
-		}
-
-		exports, is_set := limitsMap["exports"]
-		if is_set {
-			account.Limits().SetMaxExports(int64(exports.(int)))
+			for k, fn := range mappings {
+				if value, ok := limitsMap[k]; ok {
+					fn(int64(value.(int)))
+				}
+			}
 		}
 	}
 
@@ -220,29 +220,50 @@ func resourceAccountRead(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	err = d.Set("expiry", time.Unix(account.Expiry(), 0).Format(time.RFC3339))
+	expiry := account.Expiry()
+	if expiry != 0 {
+		err = d.Set("expiry", time.Unix(account.Expiry(), 0).Format(time.RFC3339))
+		if err != nil {
+			return err
+		}
+	}
+
+	tags, err := account.Tags().All()
 	if err != nil {
 		return err
 	}
 
-	limits := []any{
-		map[string]any{
-			"bearer_tokens": !account.Limits().DisallowBearerTokens(),
-			"connections":   account.Limits().MaxConnections(),
-			"leafnodes":     account.Limits().MaxLeafNodeConnections(),
-			"payload":       account.Limits().MaxPayload(),
-			"subscriptions": account.Limits().MaxSubscriptions(),
-			"imports":       account.Limits().MaxImports(),
-			"exports":       account.Limits().MaxExports(),
-		},
-	}
-
-	err = d.Set("limits", limits)
+	err = d.Set("tags", tags)
 	if err != nil {
 		return err
+	}
+
+	limits := accountLimits(account)
+	if configuredLimits, set := d.GetOk("limits"); set {
+		if limitsMap, ok := configuredLimits.([]any)[0].(map[string]any); ok {
+			for k := range limitsMap {
+				limitsMap[k] = limits[k]
+			}
+			err = d.Set("limits", []any{limitsMap})
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
+}
+
+func accountLimits(account authb.Account) map[string]any {
+	return map[string]any{
+		"bearer_tokens": !account.Limits().DisallowBearerTokens(),
+		"connections":   account.Limits().MaxConnections(),
+		"leafnodes":     account.Limits().MaxLeafNodeConnections(),
+		"payload":       account.Limits().MaxPayload(),
+		"subscriptions": account.Limits().MaxSubscriptions(),
+		"imports":       account.Limits().MaxImports(),
+		"exports":       account.Limits().MaxExports(),
+	}
 }
 
 // HERE(ploubser): We cannot currently delete system accounts
@@ -300,46 +321,37 @@ func resourceAccountUpdate(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	limits, set := d.GetOk("limits")
+	if limits, set := d.GetOk("limits"); set {
+		if limitsMap, ok := limits.([]any)[0].(map[string]any); ok {
+			mappings := map[string]func(int64) error{
+				"subscriptions": account.Limits().SetMaxSubscriptions,
+				"connections":   account.Limits().SetMaxConnections,
+				"payload":       account.Limits().SetMaxPayload,
+				"leafnodes":     account.Limits().SetMaxLeafNodeConnections,
+				"imports":       account.Limits().SetMaxImports,
+				"exports":       account.Limits().SetMaxExports,
+			}
 
-	if set {
-		limitsRaw := limits.([]any)[0]
-		limitsMap := limitsRaw.(map[string]any)
+			if bearerTokens, ok := limitsMap["bearer_tokens"]; ok {
+				account.Limits().SetDisallowBearerTokens(!bearerTokens.(bool))
+			}
 
-		bearer_tokens, is_set := limitsMap["bearer_tokens"]
-		if is_set {
-			account.Limits().SetDisallowBearerTokens(!bearer_tokens.(bool))
+			for k, fn := range mappings {
+				if value, ok := limitsMap[k]; ok {
+					fn(int64(value.(int)))
+				}
+			}
 		}
+	}
 
-		subscriptions, is_set := limitsMap["subscriptions"]
-		if is_set {
-			account.Limits().SetMaxSubscriptions(int64(subscriptions.(int)))
-		}
+	tags := []string{}
+	for _, tag := range d.Get("tags").([]any) {
+		tags = append(tags, tag.(string))
+	}
 
-		connections, is_set := limitsMap["connections"]
-		if is_set {
-			account.Limits().SetMaxConnections(int64(connections.(int)))
-		}
-
-		payload, is_set := limitsMap["payload"]
-		if is_set {
-			account.Limits().SetMaxPayload(int64(payload.(int)))
-		}
-
-		leafnodes, is_set := limitsMap["leafnodes"]
-		if is_set {
-			account.Limits().SetMaxLeafNodeConnections(int64(leafnodes.(int)))
-		}
-
-		imports, is_set := limitsMap["imports"]
-		if is_set {
-			account.Limits().SetMaxImports(int64(imports.(int)))
-		}
-
-		exports, is_set := limitsMap["exports"]
-		if is_set {
-			account.Limits().SetMaxExports(int64(exports.(int)))
-		}
+	err = account.Tags().Set(tags...)
+	if err != nil {
+		return err
 	}
 
 	expiryString, isSet := d.GetOk("expiry")

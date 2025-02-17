@@ -18,8 +18,6 @@ provider "jetstream" {
 
 resource "jetstream_operator" "TEST" { 
   name        = "TEST"
-  service_url = "https://...." // optional
-  tags        = ["foo", "bar"]     // optional
 
 } 
 resource "jetstream_account_sk" "FOO" { 
@@ -45,6 +43,22 @@ resource "jetstream_user" "WEATHER_USER" {
  operator    = "TEST"
  account     = "WEATHER_SERVICE"
  signing_key = jetstream_account_sk.FOO.public_key
+
+ limits {
+   payload            = 10000
+   bearer_tokens      = true
+   subscriptions      = 100
+ }
+ 
+ publish {
+   allow = [ "foo.bar" ]
+   deny = [ "bar.foo" ] 
+ }
+ 
+ subscribe {
+   allow = [ "foo.bar" ]
+   deny = [ "bar.foo" ]
+ }
 
  depends_on = [
     jetstream_operator.TEST,
@@ -77,7 +91,13 @@ func TestResourceUser(t *testing.T) {
 				Config: testUserBasic,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "public_key"),
-					// Check jwt contents and see if it matches what we expect
+					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "limits.0.bearer_tokens", "true"),
+					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "limits.0.payload", "10000"),
+					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "limits.0.subscriptions", "100"),
+					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "publish.0.allow.0", "foo.bar"),
+					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "publish.0.deny.0", "bar.foo"),
+					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "subscribe.0.allow.0", "foo.bar"),
+					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "subscribe.0.deny.0", "bar.foo"),
 				),
 			},
 		},

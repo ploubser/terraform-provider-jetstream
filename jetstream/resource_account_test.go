@@ -43,6 +43,7 @@ resource "jetstream_account" "WEATHER_SERVICE" {
 	exports       = 19
   }
 
+  tags        = ["foo", "bar"]    
   expiry = "2100-02-11T00:00:00Z"
 
   depends_on = [
@@ -75,6 +76,8 @@ func TestResourceAccount(t *testing.T) {
 				Config: testAccountBasic,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("jetstream_account.WEATHER_SERVICE", "public_key"),
+					resource.TestCheckResourceAttr("jetstream_account.WEATHER_SERVICE", "tags.0", "foo"),
+					resource.TestCheckResourceAttr("jetstream_account.WEATHER_SERVICE", "tags.1", "bar"),
 					resource.TestCheckResourceAttr("jetstream_account.WEATHER_SERVICE", "limits.0.bearer_tokens", "true"),
 					resource.TestCheckResourceAttr("jetstream_account.WEATHER_SERVICE", "limits.0.connections", "1000"),
 					resource.TestCheckResourceAttr("jetstream_account.WEATHER_SERVICE", "limits.0.leafnodes", "100"),

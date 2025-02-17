@@ -163,9 +163,12 @@ func resourceOperatorRead(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	err = d.Set("expiry", time.Unix(operator.Expiry(), 0).Format(time.RFC3339))
-	if err != nil {
-		return err
+	expiry := operator.Expiry()
+	if expiry != 0 {
+		err = d.Set("expiry", time.Unix(operator.Expiry(), 0).Format(time.RFC3339))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -209,19 +212,19 @@ func resourceOperatorUpdate(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	o, err := auth.Operators().Get(d.Id())
+	operator, err := auth.Operators().Get(d.Id())
 	if err != nil {
 		return err
 	}
 
 	serviceUrl := d.Get("operator_service_url").(string)
-	err = o.SetOperatorServiceURL(serviceUrl)
+	err = operator.SetOperatorServiceURL(serviceUrl)
 	if err != nil {
 		return err
 	}
 
 	accountServer := d.Get("account_server_url").(string)
-	err = o.SetAccountServerURL(accountServer)
+	err = operator.SetAccountServerURL(accountServer)
 	if err != nil {
 		return err
 	}
@@ -231,7 +234,7 @@ func resourceOperatorUpdate(d *schema.ResourceData, m any) error {
 		tags = append(tags, tag.(string))
 	}
 
-	err = o.Tags().Set(tags...)
+	err = operator.Tags().Set(tags...)
 	if err != nil {
 		return err
 	}
@@ -242,7 +245,7 @@ func resourceOperatorUpdate(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	err = o.SetExpiry(x.Unix())
+	err = operator.SetExpiry(x.Unix())
 	if err != nil {
 		return err
 	}
