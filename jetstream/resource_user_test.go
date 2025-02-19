@@ -201,7 +201,8 @@ func TestResourceUser(t *testing.T) {
 			{
 				Config: testUserBasic,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "public_key"),
+					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "jwt"),
+					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "credentials"),
 					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "limits.0.bearer_tokens", "true"),
 					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "limits.0.payload", "10000"),
 					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "limits.0.subscriptions", "100"),
@@ -214,13 +215,15 @@ func TestResourceUser(t *testing.T) {
 			{
 				Config: testunScopedSK,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "public_key"),
+					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "jwt"),
+					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "credentials"),
 				),
 			},
 			{
 				Config: testScopedSK,
 				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "public_key"),
+					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "jwt"),
+					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "credentials"),
 				),
 			},
 		},

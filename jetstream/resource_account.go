@@ -53,7 +53,7 @@ func resourceAccount() *schema.Resource {
 				Type:         schema.TypeString,
 				Description:  "Sets an expiration date for the account JWT using a RFC3339 timestamp",
 				Optional:     true,
-				ForceNew:     false,
+				ForceNew:     true,
 				ValidateFunc: validation.IsRFC3339Time,
 			},
 			"tags": {
@@ -113,28 +113,29 @@ func resourceAccountCreate(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
 	operatorname := d.Get("operator").(string)
 	operator, err := auth.Operators().Get(operatorname)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to load operator '%s': %s", operatorname, err)
 	}
 
-	accountName := d.Get("name").(string)
+	accountname := d.Get("name").(string)
 	var account authb.Account
 	operatorSigningKey := d.Get("operator_signing_key").(string)
 
+	// TODO(ploubser): Update this after operator_sk has been updated
 	if operatorSigningKey != "" {
 		account, err = authb.NewAccountFromJWT(operatorSigningKey)
 		if err != nil {
-			return err
+			return fmt.Errorf("THIS FAILURE HAS A TODO")
 		}
 	} else {
-		account, err = operator.Accounts().Add(accountName)
+		account, err = operator.Accounts().Add(accountname)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to create account: %s", err)
 		}
 	}
 
@@ -151,7 +152,7 @@ func resourceAccountCreate(d *schema.ResourceData, m any) error {
 
 	err = account.Tags().Set(tags...)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create tags for account '%s': %s", accountname, err)
 	}
 
 	if limits, set := d.GetOk("limits"); set {
@@ -177,25 +178,25 @@ func resourceAccountCreate(d *schema.ResourceData, m any) error {
 		}
 	}
 
-	expiryString, isSet := d.GetOk("expiry")
+	expiry, isSet := d.GetOk("expiry")
 	if isSet {
-		parsedTime, err := time.Parse(time.RFC3339, expiryString.(string))
+		parsedTime, err := time.Parse(time.RFC3339, expiry.(string))
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to parse time string '%s': %s", expiry.(string), err)
 		}
 
 		err = account.SetExpiry(parsedTime.Unix())
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to set expiry for account '%s': %s", accountname, err)
 		}
 	}
 
 	err = auth.Commit()
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create account '%s': %s", accountname, err)
 	}
 
-	d.SetId(accountName)
+	d.SetId(accountname)
 	d.Set("public_key", account.JWT())
 
 	return nil
@@ -205,37 +206,37 @@ func resourceAccountRead(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
 	operatorname := d.Get("operator").(string)
 	operator, err := auth.Operators().Get(operatorname)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to load operator '%s': %s", operatorname, err)
 	}
 
 	accountname := d.Get("name").(string)
 	account, err := operator.Accounts().Get(accountname)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load account: %s", err)
 	}
 
 	expiry := account.Expiry()
 	if expiry != 0 {
 		err = d.Set("expiry", time.Unix(account.Expiry(), 0).Format(time.RFC3339))
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to get expiry for account '%s': %s", accountname, err)
 		}
 	}
 
 	tags, err := account.Tags().All()
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to get tags for account '%s': %s", accountname, err)
 	}
 
 	err = d.Set("tags", tags)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to set tags for account '%s': %s", accountname, err)
 	}
 
 	limits := accountLimits(account)
@@ -246,7 +247,7 @@ func resourceAccountRead(d *schema.ResourceData, m any) error {
 			}
 			err = d.Set("limits", []any{limitsMap})
 			if err != nil {
-				return err
+				return fmt.Errorf("unable to set limits for account '%s': %s", accountname, err)
 			}
 		}
 	}
@@ -271,19 +272,19 @@ func resourceAccountDelete(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
 	operatorname := d.Get("operator").(string)
 	operator, err := auth.Operators().Get(operatorname)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to load operator '%s': %s", operatorname, err)
 	}
 
 	accountname := d.Get("name").(string)
 	err = operator.Accounts().Delete(accountname)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load account: %s", err)
 	}
 
 	err = auth.Commit()
@@ -306,19 +307,19 @@ func resourceAccountUpdate(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
 	operatorname := d.Get("operator").(string)
 	operator, err := auth.Operators().Get(operatorname)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to load operator '%s': %s", operatorname, err)
 	}
 
 	accountname := d.Get("name").(string)
 	account, err := operator.Accounts().Get(accountname)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load account: %s", err)
 	}
 
 	if limits, set := d.GetOk("limits"); set {
@@ -351,19 +352,19 @@ func resourceAccountUpdate(d *schema.ResourceData, m any) error {
 
 	err = account.Tags().Set(tags...)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to update tags for account '%s': %s", accountname, err)
 	}
 
-	expiryString, isSet := d.GetOk("expiry")
+	expiry, isSet := d.GetOk("expiry")
 	if isSet {
-		parsedTime, err := time.Parse(time.RFC3339, expiryString.(string))
+		parsedTime, err := time.Parse(time.RFC3339, expiry.(string))
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to parse time string '%s': %s", expiry.(string), err)
 		}
 
 		err = account.SetExpiry(parsedTime.Unix())
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to set expiry for account '%s': %s", accountname, err)
 		}
 	}
 

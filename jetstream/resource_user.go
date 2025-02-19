@@ -2,6 +2,7 @@ package jetstream
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
@@ -54,6 +55,13 @@ func resourceUser() *schema.Resource {
 				Optional:    true,
 				ForceNew:    false,
 				Elem:        &schema.Schema{Type: schema.TypeString},
+			},
+			"expiry": {
+				Type:         schema.TypeString,
+				Description:  "Sets an expiration date for the user credentials using a RFC3339 timestamp",
+				Optional:     true,
+				ForceNew:     false,
+				ValidateFunc: validation.IsRFC3339Time,
 			},
 			"limits": {
 				Type:        schema.TypeList,
@@ -116,9 +124,15 @@ func resourceUser() *schema.Resource {
 			},
 
 			// Exported
-			"public_key": {
+			"jwt": {
 				Type:     schema.TypeString,
 				Computed: true,
+				ForceNew: true,
+			},
+			"credentials": {
+				Type:     schema.TypeString,
+				Computed: true,
+				ForceNew: true,
 			},
 		},
 	}
@@ -177,7 +191,23 @@ func resourceUserCreate(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	d.Set("public_key", user.JWT())
+	expiry, isSet := d.GetOk("expiry")
+	expiryDuration := time.Duration(0)
+	if isSet {
+		expiresAt, err := time.Parse(time.RFC3339, expiry.(string))
+		if err != nil {
+			return fmt.Errorf("unable to parse time string '%s': %s", expiry.(string), err)
+		}
+		expiryDuration = time.Until(expiresAt)
+	}
+
+	creds, err := user.Creds(expiryDuration)
+	if err != nil {
+		return fmt.Errorf("unable to generate creds for user '%s': %s", username, err)
+	}
+
+	d.Set("credentials", string(creds))
+	d.Set("jwt", user.JWT())
 	d.SetId(username)
 
 	return nil
@@ -256,7 +286,12 @@ func resourceUserRead(d *schema.ResourceData, m any) error {
 	if err != nil {
 		return err
 	}
+
 	if err := d.Set("tags", tags); err != nil {
+		return err
+	}
+
+	if err := d.Set("jwt", user.JWT()); err != nil {
 		return err
 	}
 
