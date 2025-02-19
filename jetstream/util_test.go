@@ -402,12 +402,12 @@ func testAccountSigningKeyDoesnotExist(storedir, keydir, operatorname, accountna
 
 		operator, err := auth.Operators().Get(operatorname)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load operator '%s': %s", operatorname, err)
 		}
 
 		account, err := operator.Accounts().Get(accountname)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load account '%s': %s", accountname, err)
 		}
 
 		if len(account.ScopedSigningKeys().List()) > 0 {

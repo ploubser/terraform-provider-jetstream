@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
-	"github.com/nats-io/jsm.go"
-	"github.com/nats-io/nats.go"
 )
 
 const testAccountBasic = `
@@ -27,7 +25,6 @@ resource "jetstream_operator" "TEST" {
 
 // TODO(ploubser):
 // Test system account when we can delete it
-// Test signing keys
 
 resource "jetstream_account" "WEATHER_SERVICE" {
   name       = "WEATHER_SERVICE"
@@ -53,20 +50,6 @@ resource "jetstream_account" "WEATHER_SERVICE" {
 `
 
 func TestResourceAccount(t *testing.T) {
-	srv := createJSServer(t)
-	defer srv.Shutdown()
-
-	nc, err := nats.Connect(srv.ClientURL())
-	if err != nil {
-		t.Fatalf("could not connect: %s", err)
-	}
-	defer nc.Close()
-
-	_, err = jsm.New(nc)
-	if err != nil {
-		t.Fatalf("could not connect: %s", err)
-	}
-
 	resource.Test(t, resource.TestCase{
 		ProviderFactories: testJsProviders,
 		// Write this check next

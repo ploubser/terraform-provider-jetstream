@@ -43,8 +43,9 @@ func resourceUser() *schema.Resource {
 			"signing_key": {
 				Type:         schema.TypeString,
 				Description:  "The signing key",
-				Required:     true,
+				Optional:     true,
 				ForceNew:     true,
+				Computed:     true,
 				ValidateFunc: validation.StringIsNotEmpty,
 			},
 			"tags": {
@@ -143,15 +144,32 @@ func resourceUserCreate(d *schema.ResourceData, m any) error {
 	}
 
 	username := d.Get("name").(string)
-	signer := d.Get("signing_key").(string)
-	user, err := account.Users().Add(username, signer)
+	signer, isSet := d.GetOk("signing_key")
+	var user authb.User
+
+	if !isSet {
+		signer, err = account.ScopedSigningKeys().Add()
+		if err != nil {
+			return fmt.Errorf("unable to create signing key for user %s: %s", username, err)
+		}
+	}
+
+	user, err = account.Users().Add(username, signer.(string))
 	if err != nil {
 		return err
 	}
 
-	err = updateUser(user, d)
-	if err != nil {
-		return err
+	if !isSet {
+		if err = updateUser(user, d); err != nil {
+			return fmt.Errorf("cannot update user limits: %s", err)
+		}
+	}
+
+	// If signer is set, only update limits if key is not scoped
+	if _, err = account.ScopedSigningKeys().GetScope(signer.(string)); err != nil {
+		if err = updateUser(user, d); err != nil {
+			return fmt.Errorf("cannot update user limits: %s", err)
+		}
 	}
 
 	err = auth.Commit()
@@ -186,10 +204,10 @@ func resourceUserRead(d *schema.ResourceData, m any) error {
 
 	user, err := account.Users().Get(d.Get("name").(string))
 	if err != nil {
+		d.SetId("") // Remove from state if user is missing
 		return err
 	}
 
-	// TODO(ploubser): Confirm that issuer is always the correct value
 	err = d.Set("signing_key", user.Issuer())
 	if err != nil {
 		return err
@@ -227,11 +245,19 @@ func resourceUserRead(d *schema.ResourceData, m any) error {
 			for k := range subPermsMap {
 				subPermsMap[k] = subPerms[k]
 			}
-			err = d.Set("publish", []any{subPermsMap})
+			err = d.Set("subscribe", []any{subPermsMap})
 			if err != nil {
 				return err
 			}
 		}
+	}
+
+	tags, err := user.Tags().All()
+	if err != nil {
+		return err
+	}
+	if err := d.Set("tags", tags); err != nil {
+		return err
 	}
 
 	return nil
@@ -293,13 +319,22 @@ func updateUser(user authb.User, d *schema.ResourceData) error {
 	if limits, set := d.GetOk("limits"); set {
 		if limitsMap, ok := limits.([]any)[0].(map[string]any); ok {
 			if bearer_tokens, isSet := limitsMap["bearer_tokens"]; isSet {
-				user.SetBearerToken(bearer_tokens.(bool))
+				err := user.SetBearerToken(bearer_tokens.(bool))
+				if err != nil {
+					return err
+				}
 			}
 			if subscriptions, isSet := limitsMap["subscriptions"]; isSet {
-				user.SetMaxSubscriptions(int64(subscriptions.(int)))
+				err := user.SetMaxSubscriptions(int64(subscriptions.(int)))
+				if err != nil {
+					return err
+				}
 			}
 			if payload, isSet := limitsMap["payload"]; isSet {
-				user.SetMaxPayload(int64(payload.(int)))
+				err := user.SetMaxPayload(int64(payload.(int)))
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -313,9 +348,15 @@ func updateUser(user authb.User, d *schema.ResourceData) error {
 						permissions = append(permissions, rule.(string))
 					}
 					if permType == "allow" {
-						user.PubPermissions().SetAllow(permissions...)
+						err := user.PubPermissions().SetAllow(permissions...)
+						if err != nil {
+							return err
+						}
 					} else {
-						user.PubPermissions().SetDeny(permissions...)
+						err := user.PubPermissions().SetDeny(permissions...)
+						if err != nil {
+							return err
+						}
 					}
 				}
 			}
@@ -331,9 +372,15 @@ func updateUser(user authb.User, d *schema.ResourceData) error {
 						permissions = append(permissions, rule.(string))
 					}
 					if permType == "allow" {
-						user.SubPermissions().SetAllow(permissions...)
+						err := user.SubPermissions().SetAllow(permissions...)
+						if err != nil {
+							return err
+						}
 					} else {
-						user.SubPermissions().SetDeny(permissions...)
+						err := user.SubPermissions().SetDeny(permissions...)
+						if err != nil {
+							return err
+						}
 					}
 				}
 			}

@@ -18,8 +18,6 @@ provider "jetstream" {
 
 resource "jetstream_operator" "TEST" { 
   name        = "TEST"
-  service_url = "https://...." // optional
-  tags        = ["foo", "bar"]     // optional
 } 
 
 resource "jetstream_operator_sk" "FOO" { 

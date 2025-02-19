@@ -10,6 +10,115 @@ import (
 
 const testUserBasic = `
 provider "jetstream" {
+	servers = "foo"
+  	store_dir_path = "/tmp/test/store"
+  	keys_dir_path = "/tmp/test/keys"
+  	auth_backend = "nsc"
+}
+
+resource "jetstream_operator" "TEST" { 
+	name        = "TEST"
+} 
+
+resource "jetstream_account" "WEATHER_SERVICE" {
+  	name       = "WEATHER_SERVICE"
+  	operator   = "TEST"
+
+  	depends_on = [
+    	jetstream_operator.TEST,
+  	]  
+} 
+
+resource "jetstream_user" "WEATHER_USER" {
+	name        = "WEATHER_USER"
+ 	operator    = "TEST"
+ 	account     = "WEATHER_SERVICE"
+
+ 	limits {
+   		payload            = 10000
+   		bearer_tokens      = true
+   		subscriptions      = 100
+ 	}
+ 
+ 	publish {
+   		allow = [ "foo.bar" ]
+   		deny = [ "bar.foo" ] 
+ 	}
+ 
+ 	subscribe {
+   		allow = [ "foo.bar" ]
+   		deny = [ "bar.foo" ]
+ 	}
+
+ 	depends_on = [
+    	jetstream_operator.TEST,
+    	jetstream_account.WEATHER_SERVICE,
+  	]
+}
+`
+const testunScopedSK = `
+provider "jetstream" {
+	servers = "foo"
+  	store_dir_path = "/tmp/test/store"
+  	keys_dir_path = "/tmp/test/keys"
+  	auth_backend = "nsc"
+}
+
+resource "jetstream_operator" "TEST" { 
+	name        = "TEST"
+} 
+
+resource "jetstream_account" "WEATHER_SERVICE" {
+  	name       = "WEATHER_SERVICE"
+  	operator   = "TEST"
+
+  	depends_on = [
+    	jetstream_operator.TEST,
+  	]  
+}
+
+resource "jetstream_account_sk" "UNSCOPED_SK" { 
+  operator   = "TEST"
+  account = "WEATHER_SERVICE"
+
+   depends_on = [
+     jetstream_operator.TEST,
+	 jetstream_account.WEATHER_SERVICE
+   ]
+} 
+
+resource "jetstream_user" "WEATHER_USER" {
+	name        = "WEATHER_USER"
+ 	operator    = "TEST"
+ 	account     = "WEATHER_SERVICE"
+ 	signing_key = jetstream_account_sk.UNSCOPED_SK.public_key
+ 
+ 	limits {
+   		payload            = 10000
+   		bearer_tokens      = true
+   		subscriptions      = 100
+	}
+ 
+ 	publish {
+   		allow = [ "foo.bar" ]
+   		deny = [ "bar.foo" ] 
+ 	}
+ 
+ 	subscribe {
+   		allow = [ "foo.bar" ]
+   		deny = [ "bar.foo" ]
+ 	}
+
+ 	depends_on = [
+   		jetstream_operator.TEST,
+   		jetstream_account.WEATHER_SERVICE,
+		jetstream_account_sk.UNSCOPED_SK
+  	]
+}
+`
+
+const testScopedSK = `
+provider "jetstream" {
   servers = "foo"
   store_dir_path = "/tmp/test/store"
   keys_dir_path = "/tmp/test/keys"
@@ -18,15 +127,33 @@ provider "jetstream" {
 
 resource "jetstream_operator" "TEST" { 
   name        = "TEST"
-
 } 
-resource "jetstream_account_sk" "FOO" { 
+
+resource "jetstream_account_sk" "SCOPED_SK" { 
   operator   = "TEST"
   account = "WEATHER_SERVICE"
-  depends_on = [
-    jetstream_operator.TEST,
-	jetstream_account.WEATHER_SERVICE
-  ]
+  role = "test_role"
+
+  limits {
+    payload            = 10000
+    bearer_tokens      = true
+    subscriptions      = 100
+  }
+ 
+  publish {
+    allow = [ "foo.bar" ]
+    deny = [ "bar.foo" ] 
+  }
+ 
+  subscribe {
+    allow = [ "foo.bar" ]
+    deny = [ "bar.foo" ]
+  }
+
+   depends_on = [
+     jetstream_operator.TEST,
+	 jetstream_account.WEATHER_SERVICE
+   ]
 } 
 
 resource "jetstream_account" "WEATHER_SERVICE" {
@@ -42,28 +169,12 @@ resource "jetstream_user" "WEATHER_USER" {
  name        = "WEATHER_USER"
  operator    = "TEST"
  account     = "WEATHER_SERVICE"
- signing_key = jetstream_account_sk.FOO.public_key
-
- limits {
-   payload            = 10000
-   bearer_tokens      = true
-   subscriptions      = 100
- }
- 
- publish {
-   allow = [ "foo.bar" ]
-   deny = [ "bar.foo" ] 
- }
- 
- subscribe {
-   allow = [ "foo.bar" ]
-   deny = [ "bar.foo" ]
- }
+ signing_key = jetstream_account_sk.SCOPED_SK.public_key
 
  depends_on = [
     jetstream_operator.TEST,
     jetstream_account.WEATHER_SERVICE,
-	jetstream_account_sk.FOO
+	jetstream_account_sk.SCOPED_SK
   ]
 }
 `
@@ -98,6 +209,18 @@ func TestResourceUser(t *testing.T) {
 					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "publish.0.deny.0", "bar.foo"),
 					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "subscribe.0.allow.0", "foo.bar"),
 					resource.TestCheckResourceAttr("jetstream_user.WEATHER_USER", "subscribe.0.deny.0", "bar.foo"),
+				),
+			},
+			{
+				Config: testunScopedSK,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "public_key"),
+				),
+			},
+			{
+				Config: testScopedSK,
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttrSet("jetstream_user.WEATHER_USER", "public_key"),
 				),
 			},
 		},
