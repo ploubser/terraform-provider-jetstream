@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
+	authb "github.com/synadia-io/jwt-auth-builder.go"
 )
 
 func resourceOperator() *schema.Resource {
@@ -69,53 +70,23 @@ func resourceOperatorCreate(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
 	name := d.Get("name").(string)
 	operator, err := auth.Operators().Add(name)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create operator '%s': %s", name, err)
 	}
 
-	serviceUrl := d.Get("operator_service_url").(string)
-	err = operator.SetOperatorServiceURL(serviceUrl)
+	err = updateOperatorEditableFields(operator, d)
 	if err != nil {
 		return err
-	}
-
-	accountServer := d.Get("account_server_url").(string)
-	err = operator.SetAccountServerURL(accountServer)
-	if err != nil {
-		return err
-	}
-
-	tags := []string{}
-	for _, tag := range d.Get("tags").([]any) {
-		tags = append(tags, tag.(string))
-	}
-
-	err = operator.Tags().Set(tags...)
-	if err != nil {
-		return err
-	}
-
-	expiryString, isSet := d.GetOk("expiry")
-	if isSet {
-		parsedTime, err := time.Parse(time.RFC3339, expiryString.(string))
-		if err != nil {
-			return err
-		}
-
-		err = operator.SetExpiry(parsedTime.Unix())
-		if err != nil {
-			return err
-		}
 	}
 
 	err = auth.Commit()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to commit changes: %s", err)
 	}
 
 	d.SetId(name)
@@ -128,46 +99,47 @@ func resourceOperatorRead(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
 	operator, err := auth.Operators().Get(d.Id())
 	if err != nil {
-		return err
+		d.SetId("")
+		return nil
 	}
 
 	err = d.Set("name", operator.Name())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read name field: %s", err)
 	}
 
 	if len(operator.OperatorServiceURLs()) > 0 {
 		err = d.Set("operator_service_url", operator.OperatorServiceURLs()[0])
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read operator_service_url field: %s", err)
 		}
 	}
 
 	err = d.Set("account_server_url", operator.AccountServerURL())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read account_server_url field: %s", err)
 	}
 
 	tags, err := operator.Tags().All()
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to read tags from operator '%s': %s", operator.Name(), err)
 	}
 
 	err = d.Set("tags", tags)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read tags field: %s", err)
 	}
 
 	expiry := operator.Expiry()
 	if expiry != 0 {
 		err = d.Set("expiry", time.Unix(operator.Expiry(), 0).Format(time.RFC3339))
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to read expiry for operator '%s': %s", operator.Name(), err)
 		}
 	}
 
@@ -178,18 +150,18 @@ func resourceOperatorDelete(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
 	name := d.Get("name").(string)
 	err = auth.Operators().Delete(name)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to load operator '%s': %s", name, err)
 	}
 
 	err = auth.Commit()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to commit changes: %s", err)
 	}
 
 	// HERE(ploubser): This is temporary while using the NSC provider, since it can't remove operators
@@ -209,24 +181,42 @@ func resourceOperatorUpdate(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
 	operator, err := auth.Operators().Get(d.Id())
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to load operator '%s': %s", d.Id(), err)
 	}
 
-	serviceUrl := d.Get("operator_service_url").(string)
-	err = operator.SetOperatorServiceURL(serviceUrl)
+	err = updateOperatorEditableFields(operator, d)
 	if err != nil {
 		return err
 	}
 
-	accountServer := d.Get("account_server_url").(string)
-	err = operator.SetAccountServerURL(accountServer)
+	err = auth.Commit()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to commit changes: %s", err)
+	}
+
+	return nil
+}
+
+func updateOperatorEditableFields(operator authb.Operator, d *schema.ResourceData) error {
+	serviceUrl, isSet := d.GetOk("operator_service_url")
+	if isSet {
+		err := operator.SetOperatorServiceURL(serviceUrl.(string))
+		if err != nil {
+			return fmt.Errorf("unable to set operator_service_url operator '%s': %s", operator.Name(), err)
+		}
+	}
+
+	accountServer, isSet := d.GetOk("account_server_url")
+	if isSet {
+		err := operator.SetAccountServerURL(accountServer.(string))
+		if err != nil {
+			return fmt.Errorf("unable to set account_server_url operator '%s': %s", operator.Name(), err)
+		}
 	}
 
 	tags := []string{}
@@ -234,25 +224,22 @@ func resourceOperatorUpdate(d *schema.ResourceData, m any) error {
 		tags = append(tags, tag.(string))
 	}
 
-	err = operator.Tags().Set(tags...)
+	err := operator.Tags().Set(tags...)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to set tags operator '%s': %s", operator.Name(), err)
 	}
 
-	expiryString := d.Get("expiry").(string)
-	x, err := time.Parse(time.RFC3339, expiryString)
-	if err != nil {
-		return err
-	}
+	expiry, isSet := d.GetOk("expiry")
+	if isSet {
+		parsedTime, err := time.Parse(time.RFC3339, expiry.(string))
+		if err != nil {
+			return fmt.Errorf("unable to parse time string '%s': %s", expiry.(string), err)
+		}
 
-	err = operator.SetExpiry(x.Unix())
-	if err != nil {
-		return err
-	}
-
-	err = auth.Commit()
-	if err != nil {
-		return err
+		err = operator.SetExpiry(parsedTime.Unix())
+		if err != nil {
+			return fmt.Errorf("unable to set expiry for operator '%s': %s", operator.Name(), err)
+		}
 	}
 
 	return nil

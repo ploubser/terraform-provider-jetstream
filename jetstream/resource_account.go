@@ -36,6 +36,7 @@ func resourceAccount() *schema.Resource {
 				ForceNew:     true,
 				ValidateFunc: validation.StringIsNotEmpty,
 			},
+			// TODO(ploubser): This bit is questionable. Not sure this works
 			"system": {
 				Type:        schema.TypeBool,
 				Description: "Creates a system account",
@@ -46,14 +47,14 @@ func resourceAccount() *schema.Resource {
 				Type:         schema.TypeString,
 				Description:  "The operator's signing key",
 				Optional:     true,
-				ForceNew:     true,
+				ForceNew:     false,
 				ValidateFunc: validation.StringIsNotEmpty,
 			},
 			"expiry": {
 				Type:         schema.TypeString,
 				Description:  "Sets an expiration date for the account JWT using a RFC3339 timestamp",
 				Optional:     true,
-				ForceNew:     true,
+				ForceNew:     false,
 				ValidateFunc: validation.IsRFC3339Time,
 			},
 			"tags": {
@@ -124,71 +125,33 @@ func resourceAccountCreate(d *schema.ResourceData, m any) error {
 
 	accountname := d.Get("name").(string)
 	var account authb.Account
-	operatorSigningKey := d.Get("operator_signing_key").(string)
 
-	// TODO(ploubser): Update this after operator_sk has been updated
-	if operatorSigningKey != "" {
-		account, err = authb.NewAccountFromJWT(operatorSigningKey)
+	operatorSigningKey, isSet := d.GetOk("operator_signing_key")
+	if isSet {
+		account, err = authb.NewAccountFromJWT(operatorSigningKey.(string))
 		if err != nil {
-			return fmt.Errorf("THIS FAILURE HAS A TODO")
+			return fmt.Errorf("unable to create new account '%s' from signing key: %s", accountname, err)
 		}
 	} else {
 		account, err = operator.Accounts().Add(accountname)
 		if err != nil {
-			return fmt.Errorf("failed to create account: %s", err)
+			return fmt.Errorf("unable to create new account '%s': %s", accountname, err)
 		}
 	}
 
-	if d.Get("system").(bool) {
-		operator.SetSystemAccount(account)
-	}
-
-	tags := []string{}
-	if rawTags, ok := d.GetOk("tags"); ok {
-		for _, tag := range rawTags.([]any) {
-			tags = append(tags, tag.(string))
-		}
-	}
-
-	err = account.Tags().Set(tags...)
-	if err != nil {
-		return fmt.Errorf("unable to create tags for account '%s': %s", accountname, err)
-	}
-
-	if limits, set := d.GetOk("limits"); set {
-		if limitsMap, ok := limits.([]any)[0].(map[string]any); ok {
-			mappings := map[string]func(int64) error{
-				"subscriptions": account.Limits().SetMaxSubscriptions,
-				"connections":   account.Limits().SetMaxConnections,
-				"payload":       account.Limits().SetMaxPayload,
-				"leafnodes":     account.Limits().SetMaxLeafNodeConnections,
-				"imports":       account.Limits().SetMaxImports,
-				"exports":       account.Limits().SetMaxExports,
-			}
-
-			if bearerTokens, ok := limitsMap["bearer_tokens"]; ok {
-				account.Limits().SetDisallowBearerTokens(!bearerTokens.(bool))
-			}
-
-			for k, fn := range mappings {
-				if value, ok := limitsMap[k]; ok {
-					fn(int64(value.(int)))
-				}
-			}
-		}
-	}
-
-	expiry, isSet := d.GetOk("expiry")
+	isSystemAccount, isSet := d.GetOk("system")
 	if isSet {
-		parsedTime, err := time.Parse(time.RFC3339, expiry.(string))
-		if err != nil {
-			return fmt.Errorf("unable to parse time string '%s': %s", expiry.(string), err)
+		if isSystemAccount.(bool) {
+			err = operator.SetSystemAccount(account)
+			if err != nil {
+				return fmt.Errorf("unable to set account '%s' as a system account: %s", accountname, err)
+			}
 		}
+	}
 
-		err = account.SetExpiry(parsedTime.Unix())
-		if err != nil {
-			return fmt.Errorf("unable to set expiry for account '%s': %s", accountname, err)
-		}
+	err = updateAccountEditableFields(account, d)
+	if err != nil {
+		return err
 	}
 
 	err = auth.Commit()
@@ -200,6 +163,7 @@ func resourceAccountCreate(d *schema.ResourceData, m any) error {
 	d.Set("public_key", account.JWT())
 
 	return nil
+
 }
 
 func resourceAccountRead(d *schema.ResourceData, m any) error {
@@ -218,7 +182,8 @@ func resourceAccountRead(d *schema.ResourceData, m any) error {
 	accountname := d.Get("name").(string)
 	account, err := operator.Accounts().Get(accountname)
 	if err != nil {
-		return fmt.Errorf("failed to load account: %s", err)
+		d.SetId("")
+		return nil
 	}
 
 	expiry := account.Expiry()
@@ -239,13 +204,21 @@ func resourceAccountRead(d *schema.ResourceData, m any) error {
 		return fmt.Errorf("unable to set tags for account '%s': %s", accountname, err)
 	}
 
-	limits := accountLimits(account)
 	if configuredLimits, set := d.GetOk("limits"); set {
-		if limitsMap, ok := configuredLimits.([]any)[0].(map[string]any); ok {
-			for k := range limitsMap {
-				limitsMap[k] = limits[k]
+		mappings := map[string]any{
+			"bearer_tokens": !account.Limits().DisallowBearerTokens(),
+			"connections":   account.Limits().MaxConnections(),
+			"leafnodes":     account.Limits().MaxLeafNodeConnections(),
+			"payload":       account.Limits().MaxPayload(),
+			"subscriptions": account.Limits().MaxSubscriptions(),
+			"imports":       account.Limits().MaxImports(),
+			"exports":       account.Limits().MaxExports(),
+		}
+		if setLimits, ok := configuredLimits.([]any)[0].(map[string]any); ok {
+			for k := range setLimits {
+				setLimits[k] = mappings[k]
 			}
-			err = d.Set("limits", []any{limitsMap})
+			err = d.Set("limits", []any{setLimits})
 			if err != nil {
 				return fmt.Errorf("unable to set limits for account '%s': %s", accountname, err)
 			}
@@ -253,18 +226,6 @@ func resourceAccountRead(d *schema.ResourceData, m any) error {
 	}
 
 	return nil
-}
-
-func accountLimits(account authb.Account) map[string]any {
-	return map[string]any{
-		"bearer_tokens": !account.Limits().DisallowBearerTokens(),
-		"connections":   account.Limits().MaxConnections(),
-		"leafnodes":     account.Limits().MaxLeafNodeConnections(),
-		"payload":       account.Limits().MaxPayload(),
-		"subscriptions": account.Limits().MaxSubscriptions(),
-		"imports":       account.Limits().MaxImports(),
-		"exports":       account.Limits().MaxExports(),
-	}
 }
 
 // HERE(ploubser): We cannot currently delete system accounts
@@ -322,37 +283,30 @@ func resourceAccountUpdate(d *schema.ResourceData, m any) error {
 		return fmt.Errorf("failed to load account: %s", err)
 	}
 
-	if limits, set := d.GetOk("limits"); set {
-		if limitsMap, ok := limits.([]any)[0].(map[string]any); ok {
-			mappings := map[string]func(int64) error{
-				"subscriptions": account.Limits().SetMaxSubscriptions,
-				"connections":   account.Limits().SetMaxConnections,
-				"payload":       account.Limits().SetMaxPayload,
-				"leafnodes":     account.Limits().SetMaxLeafNodeConnections,
-				"imports":       account.Limits().SetMaxImports,
-				"exports":       account.Limits().SetMaxExports,
-			}
+	err = updateAccountEditableFields(account, d)
+	if err != nil {
+		return err
+	}
 
-			if bearerTokens, ok := limitsMap["bearer_tokens"]; ok {
-				account.Limits().SetDisallowBearerTokens(!bearerTokens.(bool))
-			}
+	err = auth.Commit()
+	if err != nil {
+		return err
+	}
 
-			for k, fn := range mappings {
-				if value, ok := limitsMap[k]; ok {
-					fn(int64(value.(int)))
-				}
-			}
+	return nil
+}
+
+func updateAccountEditableFields(account authb.Account, d *schema.ResourceData) error {
+	tags := []string{}
+	if rawTags, ok := d.GetOk("tags"); ok {
+		for _, tag := range rawTags.([]any) {
+			tags = append(tags, tag.(string))
 		}
 	}
 
-	tags := []string{}
-	for _, tag := range d.Get("tags").([]any) {
-		tags = append(tags, tag.(string))
-	}
-
-	err = account.Tags().Set(tags...)
+	err := account.Tags().Set(tags...)
 	if err != nil {
-		return fmt.Errorf("unable to update tags for account '%s': %s", accountname, err)
+		return fmt.Errorf("unable to create tags for account '%s': %s", account.Name(), err)
 	}
 
 	expiry, isSet := d.GetOk("expiry")
@@ -364,13 +318,36 @@ func resourceAccountUpdate(d *schema.ResourceData, m any) error {
 
 		err = account.SetExpiry(parsedTime.Unix())
 		if err != nil {
-			return fmt.Errorf("unable to set expiry for account '%s': %s", accountname, err)
+			return fmt.Errorf("unable to set expiry for account '%s': %s", account.Name(), err)
 		}
 	}
 
-	err = auth.Commit()
-	if err != nil {
-		return err
+	if limits, set := d.GetOk("limits"); set {
+		if limitsMap, ok := limits.([]any)[0].(map[string]any); ok {
+			mappings := map[string]func(int64) error{
+				"subscriptions": account.Limits().SetMaxSubscriptions,
+				"connections":   account.Limits().SetMaxConnections,
+				"payload":       account.Limits().SetMaxPayload,
+				"leafnodes":     account.Limits().SetMaxLeafNodeConnections,
+				"imports":       account.Limits().SetMaxImports,
+				"exports":       account.Limits().SetMaxExports,
+			}
+			if bearerTokens, ok := limitsMap["bearer_tokens"]; ok {
+				err = account.Limits().SetDisallowBearerTokens(!bearerTokens.(bool))
+				if err != nil {
+					return fmt.Errorf("unable to set limit 'beared_tokens': %s", err)
+				}
+			}
+
+			for lname, fn := range mappings {
+				if value, ok := limitsMap[lname]; ok {
+					err = fn(int64(value.(int)))
+					if err != nil {
+						return fmt.Errorf("unable to set limit '%s': %s", lname, err)
+					}
+				}
+			}
+		}
 	}
 
 	return nil
