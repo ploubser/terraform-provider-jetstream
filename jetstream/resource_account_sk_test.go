@@ -71,7 +71,7 @@ resource "jetstream_account_sk" "SCOPED" {
 
   depends_on = [
     jetstream_operator.TEST,
-	jetstream_account.WEATHER_SERVICE
+	  jetstream_account.WEATHER_SERVICE
   ]
 } 
 `
