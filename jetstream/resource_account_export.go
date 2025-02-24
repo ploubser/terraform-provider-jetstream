@@ -153,25 +153,27 @@ func resourceAccountExportRead(d *schema.ResourceData, m any) error {
 	}
 
 	name := d.Get("name").(string)
+	var exp authb.Export
 
-	// check if it's a service export
-	for _, exp := range account.Exports().Services().List() {
-		if exp.Name() == name {
-			d.Set("service", true)
-			updateExportResource(exp, d)
-			return nil
-		}
+	exp, err = account.Exports().Services().GetByName(name)
+	if err != nil && err != authb.ErrNotFound {
+		return fmt.Errorf("unable to load service export %s: %s", name, err)
 	}
 
-	// check if it's a stream export
-	for _, exp := range account.Exports().Streams().List() {
-		if exp.Name() == name {
-			updateExportResource(exp, d)
-			return nil
+	if err == authb.ErrNotFound {
+		exp, err = account.Exports().Streams().GetByName(name)
+		if err != nil {
+			if err == authb.ErrNotFound {
+				return fmt.Errorf("unable to find service or stream export %s", name)
+			}
+			return fmt.Errorf("unable to load stream export %s: %s", name, err)
 		}
+	} else {
+		d.Set("service", true)
 	}
 
-	return fmt.Errorf("unable to find export %s in either service exports or stream exports", name)
+	updateExportResource(exp, d)
+	return nil
 }
 
 func resourceAccountExportDelete(d *schema.ResourceData, m any) error {
@@ -243,14 +245,24 @@ func resourceAccountExportUpdate(d *schema.ResourceData, m any) error {
 	}
 
 	name := d.Get("name").(string)
-	subject := d.Get("subject").(string)
+	var exp authb.Export
 
-	export, err := account.Exports().Services().Get(subject)
-	if err != nil {
-		return fmt.Errorf("failed to load export '%s' for subject '%s': %s", name, subject, err)
+	exp, err = account.Exports().Services().GetByName(name)
+	if err != nil && err != authb.ErrNotFound {
+		return fmt.Errorf("unable to load service export %s: %s", name, err)
 	}
 
-	err = updateExportEditableFields(export, d)
+	if err == authb.ErrNotFound {
+		exp, err = account.Exports().Streams().GetByName(name)
+		if err != nil {
+			if err == authb.ErrNotFound {
+				return fmt.Errorf("unable to find service or stream export %s", name)
+			}
+			return fmt.Errorf("unable to load stream export %s: %s", name, err)
+		}
+	}
+
+	err = updateExportEditableFields(exp, d)
 	if err != nil {
 		return err
 	}
