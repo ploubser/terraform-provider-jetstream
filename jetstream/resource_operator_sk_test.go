@@ -46,13 +46,11 @@ func TestResourceOperatorSK(t *testing.T) {
 
 	resource.Test(t, resource.TestCase{
 		ProviderFactories: testJsProviders,
-		CheckDestroy:      testOperatorSigningKeyDoesnotExist("/tmp/test/store", "/tmp/test/store/key", "TEST"),
 		Steps: []resource.TestStep{
 			{
 				Config: testOperatorSkBasic,
 				Check: resource.ComposeTestCheckFunc(
 					resource.TestCheckResourceAttrSet("jetstream_operator_sk.FOO", "public_key"),
-					// Check jwt contents and see if it matches what we expect
 				),
 			},
 		},

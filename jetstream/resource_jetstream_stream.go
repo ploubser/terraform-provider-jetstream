@@ -21,7 +21,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/nats-io/jsm.go"
 	"github.com/nats-io/jsm.go/api"
-	"github.com/nats-io/nats.go"
 )
 
 func resourceStream() *schema.Resource {
@@ -352,7 +351,8 @@ func resourceStreamCreate(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -374,7 +374,8 @@ func resourceStreamRead(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -525,7 +526,8 @@ func streamSourceConfigRead(source *api.StreamSource) map[string]any {
 func resourceStreamUpdate(d *schema.ResourceData, m any) error {
 	name := d.Get("name").(string)
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -561,7 +563,8 @@ func resourceStreamUpdate(d *schema.ResourceData, m any) error {
 func resourceStreamDelete(d *schema.ResourceData, m any) error {
 	name := d.Get("name").(string)
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}

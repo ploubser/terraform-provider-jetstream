@@ -19,7 +19,6 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
-	"github.com/nats-io/jsm.go"
 	"github.com/nats-io/nats.go"
 )
 
@@ -105,7 +104,8 @@ func resourceKVBucket() *schema.Resource {
 }
 
 func resourceKVBucketCreate(d *schema.ResourceData, m any) error {
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,8 @@ func resourceKVBucketRead(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	nc, _, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, _, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -219,7 +220,8 @@ func resourceKVBucketRead(d *schema.ResourceData, m any) error {
 func resourceKVBucketUpdate(d *schema.ResourceData, m any) error {
 	name := d.Get("name").(string)
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -268,7 +270,8 @@ func resourceKVBucketUpdate(d *schema.ResourceData, m any) error {
 func resourceKVBucketDelete(d *schema.ResourceData, m any) error {
 	name := d.Get("name").(string)
 
-	nc, _, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, _, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}

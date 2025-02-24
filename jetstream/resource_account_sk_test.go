@@ -66,7 +66,7 @@ resource "jetstream_account_sk" "SCOPED" {
   role  = "test_role"
 
   limits {
-	bearer_tokens = false
+	  bearer_tokens = false
   }
 
   depends_on = [

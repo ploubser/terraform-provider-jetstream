@@ -164,6 +164,7 @@ func resourceAccountExportRead(d *schema.ResourceData, m any) error {
 		exp, err = account.Exports().Streams().GetByName(name)
 		if err != nil {
 			if err == authb.ErrNotFound {
+				d.SetId("")
 				return fmt.Errorf("unable to find service or stream export %s", name)
 			}
 			return fmt.Errorf("unable to load stream export %s: %s", name, err)
@@ -172,7 +173,11 @@ func resourceAccountExportRead(d *schema.ResourceData, m any) error {
 		d.Set("service", true)
 	}
 
-	updateExportResource(exp, d)
+	err = updateExportResource(exp, d)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -195,26 +200,21 @@ func resourceAccountExportDelete(d *schema.ResourceData, m any) error {
 		return fmt.Errorf("failed to load account '%s: %s", accountname, err)
 	}
 
-	subject := d.Get("subject").(string)
 	name := d.Get("name").(string)
-	service, isSet := d.GetOk("service")
-	if isSet && service.(bool) {
-		found, err := account.Exports().Services().Delete(subject)
-		if !found {
-			return fmt.Errorf("unable to delete service export %s: export does not exist", name)
-		}
-		if err != nil {
-			return fmt.Errorf("unable to delete service export %s: %s", name, err)
-		}
+	subject := d.Get("subject").(string)
 
+	var found bool
+	if d.Get("service").(bool) {
+		found, err = account.Exports().Services().Delete(subject)
 	} else {
-		found, err := account.Exports().Streams().Delete(subject)
-		if !found {
-			return fmt.Errorf("unable to delete stream export %s: export does not exist", name)
-		}
-		if err != nil {
-			return fmt.Errorf("unable to delete stream export %s: %s", name, err)
-		}
+		found, err = account.Exports().Streams().Delete(subject)
+	}
+
+	if !found {
+		return fmt.Errorf("could not find export %s with subject %s", name, subject)
+	}
+	if err != nil {
+		return fmt.Errorf("unable to delete export %s: %s", name, err)
 	}
 
 	err = auth.Commit()
@@ -293,10 +293,20 @@ func updateExportEditableFields(export authb.Export, d *schema.ResourceData) err
 	return nil
 }
 
-func updateExportResource(export authb.Export, d *schema.ResourceData) {
-	d.Set("subject", export.Subject())
-	d.Set("description", export.Description())
-	d.Set("url", export.InfoURL())
-	d.Set("token_position", export.AccountTokenPosition())
-	d.Set("advertise", export.IsAdvertised())
+func updateExportResource(export authb.Export, d *schema.ResourceData) error {
+	fields := map[string]any{
+		"subject":        export.Subject(),
+		"description":    export.Description(),
+		"url":            export.InfoURL(),
+		"token_position": export.AccountTokenPosition(),
+		"advertise":      export.IsAdvertised(),
+	}
+
+	for key, value := range fields {
+		if err := d.Set(key, value); err != nil {
+			return fmt.Errorf("unable to set %s field: %w", key, err)
+		}
+	}
+
+	return nil
 }

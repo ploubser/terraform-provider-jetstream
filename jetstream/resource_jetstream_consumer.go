@@ -24,7 +24,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/validation"
 	"github.com/nats-io/jsm.go"
 	"github.com/nats-io/jsm.go/api"
-	"github.com/nats-io/nats.go"
 )
 
 func resourceConsumer() *schema.Resource {
@@ -410,7 +409,8 @@ func resourceConsumerUpdate(d *schema.ResourceData, m any) error {
 		return fmt.Errorf("cannot determine durable name for update")
 	}
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -451,7 +451,8 @@ func resourceConsumerCreate(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -473,7 +474,8 @@ func resourceConsumerRead(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}
@@ -589,7 +591,8 @@ func resourceConsumerDelete(d *schema.ResourceData, m any) error {
 		return err
 	}
 
-	nc, mgr, err := m.(func() (*nats.Conn, *jsm.Manager, error))()
+	providerConfig := m.(ProviderConfig)
+	nc, mgr, err := providerConfig.Connectionfn()
 	if err != nil {
 		return err
 	}

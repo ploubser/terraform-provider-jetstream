@@ -140,7 +140,7 @@ func Provider() *schema.Provider {
 			"jetstream_account_sk":     resourceAccountSk(),
 			"jetstream_user":           resourceUser(),
 			"jetstream_account_export": resourceAccountExport(),
-			"jetstream_import":         resourceImport(),
+			"jetstream_account_import": resourceImport(),
 		},
 
 		ConfigureFunc: connectMgr,
