@@ -12,8 +12,6 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0
 )
 
-require github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
-
 require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/nats-io/nsc/v2 v2.10.3-0.20250110165315-eeda721ecff6 // indirect
