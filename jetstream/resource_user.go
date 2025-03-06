@@ -142,13 +142,13 @@ func resourceUserCreate(d *schema.ResourceData, m any) error {
 	conf := m.(ProviderConfig)
 	auth, err := NewAuthProvider(conf)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create auth provider: %s", err)
 	}
 
-	opname := d.Get("operator").(string)
-	operator, err := auth.Operators().Get(opname)
+	operatorname := d.Get("operator").(string)
+	operator, err := auth.Operators().Get(operatorname)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to load operator '%s': %s", operatorname, err)
 	}
 
 	accountname := d.Get("account").(string)
@@ -158,31 +158,28 @@ func resourceUserCreate(d *schema.ResourceData, m any) error {
 	}
 
 	username := d.Get("name").(string)
-	signer, isSet := d.GetOk("signing_key")
+	signingKey, isSet := d.GetOk("signing_key")
 	var user authb.User
 
 	if !isSet {
-		signer, err = account.ScopedSigningKeys().Add()
-		if err != nil {
-			return fmt.Errorf("unable to create signing key for user %s: %s", username, err)
-		}
+		signingKey = account.Subject()
 	}
 
-	user, err = account.Users().Add(username, signer.(string))
+	user, err = account.Users().Add(username, signingKey.(string))
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to create user %s: %s", username, err)
 	}
 
 	if !isSet {
 		if err = updateUser(user, d); err != nil {
 			return fmt.Errorf("cannot update user limits: %s", err)
 		}
-	}
-
-	// If signer is set, only update limits if key is not scoped
-	if _, err = account.ScopedSigningKeys().GetScope(signer.(string)); err != nil {
-		if err = updateUser(user, d); err != nil {
-			return fmt.Errorf("cannot update user limits: %s", err)
+	} else {
+		// If signer is set, only update limits if key is not scoped
+		if _, err = account.ScopedSigningKeys().GetScope(signingKey.(string)); err != nil {
+			if err = updateUser(user, d); err != nil {
+				return fmt.Errorf("cannot update user limits: %s", err)
+			}
 		}
 	}
 

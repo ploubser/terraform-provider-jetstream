@@ -130,7 +130,7 @@ func resourceAccountCreate(d *schema.ResourceData, m any) error {
 	if isSet {
 		account, err = authb.NewAccountFromJWT(operatorSigningKey.(string))
 		if err != nil {
-			return fmt.Errorf("unable to create new account '%s' from signing key: %s", accountname, err)
+			return fmt.Errorf("unable to create new account '%s' from signing key: %s. key is %s", accountname, err, operatorSigningKey.(string))
 		}
 	} else {
 		account, err = operator.Accounts().Add(accountname)

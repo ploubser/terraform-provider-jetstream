@@ -57,7 +57,8 @@ func resourceOperatorSkCreate(d *schema.ResourceData, m any) error {
 		return fmt.Errorf("failed to commit changes: %s", err)
 	}
 
-	d.Set("public_key", key)
+	// d.Set("public_key", key)
+	d.Set("public_key", operator.JWT())
 	d.SetId(key)
 
 	return nil
